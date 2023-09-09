@@ -1,4 +1,5 @@
 // Saved registers for kernel context switches.
+// 用于内核上下文切换的保存寄存器。
 struct context {
   uint64 ra;
   uint64 sp;
@@ -32,15 +33,24 @@ extern struct cpu cpus[NCPU];
 // sits in a page by itself just under the trampoline page in the
 // user page table. not specially mapped in the kernel page table.
 // the sscratch register points here.
+// trampoline.S 中陷阱处理代码的每个进程数据位于用户页表中 trampoline 页下面的一个单独页中，在内核页表中没有特殊映射。 sscratch 寄存器指向这里。
+
 // uservec in trampoline.S saves user registers in the trapframe,
 // then initializes registers from the trapframe's
 // kernel_sp, kernel_hartid, kernel_satp, and jumps to kernel_trap.
+// trampoline.S 中的 uservec 将用户寄存器保存在陷阱帧中，然后初始化陷阱帧中 skernel_sp、kernel_hartid、kernel_satp 的寄存器，并跳转到 kernel_trap。
+
 // usertrapret() and userret in trampoline.S set up
 // the trapframe's kernel_*, restore user registers from the
 // trapframe, switch to the user page table, and enter user space.
+// trampoline.S 中的 usertrapret() 和 userret 设置陷阱帧的 kernel_*，从陷阱帧恢复用户寄存器，切换到用户页表，并进入用户空间。
+
 // the trapframe includes callee-saved user registers like s0-s11 because the
 // return-to-user path via usertrapret() doesn't return through
 // the entire kernel call stack.
+// 陷阱框架包括 s0-s11 等保存在内存中的用户寄存器，因为通过 usertrapret() 返回到用户的路径不会通过整个内核调用栈返回。
+
+
 struct trapframe {
   /*   0 */ uint64 kernel_satp;   // kernel page table
   /*   8 */ uint64 kernel_sp;     // top of process's kernel stack
@@ -87,6 +97,7 @@ struct proc {
   struct spinlock lock;
 
   // p->lock must be held when using these:
+  // 在使用这些字段时，p->lock必须被锁定
   enum procstate state;        // Process state
   struct proc *parent;         // Parent process
   void *chan;                  // If non-zero, sleeping on chan
