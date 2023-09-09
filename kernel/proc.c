@@ -295,6 +295,9 @@ fork(void)
 
   np->state = RUNNABLE;
 
+  //拷贝追踪ID
+  np->traceId = p->traceId;
+
   release(&np->lock);
 
   return pid;
