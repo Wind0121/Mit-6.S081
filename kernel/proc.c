@@ -696,3 +696,11 @@ procdump(void)
     printf("\n");
   }
 }
+
+void procnum(uint64 *cnt)
+{
+    *cnt = 0;
+    for(int i = 0;i < NPROC;i++)
+        if(proc[i].state != UNUSED)
+            (*cnt)++;
+}
