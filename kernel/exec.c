@@ -64,6 +64,7 @@ exec(char *path, char **argv)
   p = myproc();
   uint64 oldsz = p->sz;
 
+
   // Allocate two pages at the next page boundary.
   // Use the second as the user stack.
   sz = PGROUNDUP(sz);
@@ -74,6 +75,9 @@ exec(char *path, char **argv)
   uvmclear(pagetable, sz-2*PGSIZE);
   sp = sz;
   stackbase = sp - PGSIZE;
+
+  //copy
+  u2kvmcopy(pagetable,p->kernel_pagetable,0,sz);
 
   // Push argument strings, prepare rest of stack in ustack.
   for(argc = 0; argv[argc]; argc++) {
