@@ -5,6 +5,8 @@
 #include "riscv.h"
 #include "defs.h"
 #include "fs.h"
+#include "spinlock.h"
+#include "proc.h"
 
 /*
  * the kernel's page table.
@@ -54,6 +56,13 @@ kvminithart()
 {
   w_satp(MAKE_SATP(kernel_pagetable));
   sfence_vma();
+}
+
+void
+proc_kvminithart(pagetable_t pagetable)
+{
+    w_satp(MAKE_SATP(pagetable));
+    sfence_vma();
 }
 
 // Return the address of the PTE in page table pagetable
@@ -131,8 +140,8 @@ kvmpa(uint64 va)
   uint64 off = va % PGSIZE;
   pte_t *pte;
   uint64 pa;
-  
-  pte = walk(kernel_pagetable, va, 0);
+
+  pte = walk(myproc()->kernel_pagetable, va, 0);
   if(pte == 0)
     panic("kvmpa");
   if((*pte & PTE_V) == 0)
@@ -466,4 +475,45 @@ vmprint(pagetable_t pagetable)
 {
     printf("page table %p\n",pagetable);
     _vmprint(pagetable,2);
+}
+
+// 用于proc_kpt_init的辅助函数
+void
+uvmmap(pagetable_t pagetable,uint64 va,uint64 pa,uint64 sz,int perm)
+{
+    if(mappages(pagetable,va,sz,pa,perm) != 0)
+        panic("uvmmap");
+}
+
+pagetable_t
+proc_kpt_init()
+{
+    pagetable_t pagetable = (pagetable_t) kalloc();
+    if(pagetable == 0)
+        return 0;
+    memset(pagetable, 0, PGSIZE);
+
+    // uart registers
+    uvmmap(pagetable,UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+    // virtio mmio disk interface
+    uvmmap(pagetable,VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+    // CLINT
+    uvmmap(pagetable,CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+    // PLIC
+    uvmmap(pagetable,PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+    // map kernel text executable and read-only.
+    uvmmap(pagetable,KERNBASE, KERNBASE, (uint64)etext-KERNBASE, PTE_R | PTE_X);
+
+    // map kernel data and the physical RAM we'll make use of.
+    uvmmap(pagetable,(uint64)etext, (uint64)etext, PHYSTOP-(uint64)etext, PTE_R | PTE_W);
+
+    // map the trampoline for trap entry/exit to
+    // the highest virtual address in the kernel.
+    uvmmap(pagetable,TRAMPOLINE, (uint64)trampoline, PGSIZE, PTE_R | PTE_X);
+
+    return pagetable;
 }
