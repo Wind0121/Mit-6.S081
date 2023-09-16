@@ -183,7 +183,7 @@ void            vmprint(pagetable_t);
 pagetable_t     proc_kpt_init(void);
 void            uvmmap(pagetable_t,uint64,uint64,uint64,int);
 void            proc_kvminithart(pagetable_t);
-void            u2kvmcopy(pagetable_t pagetable,pagetable_t kernel_pagetable,uint64 oldsz,uint64 newsz);
+void            u2kvmcopy(pagetable_t pagetable,pagetable_t kernel_pagetable,uint64 start,uint64 sz);
 
 // plic.c
 void            plicinit(void);

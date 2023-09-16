@@ -152,7 +152,7 @@ freeproc(struct proc *p)
     proc_freepagetable(p->pagetable, p->sz);
 
   //释放内核栈
-  uvmunmap(p->kernel_pagetable,p->kstack,1,1);
+  uvmunmap(p->kernel_pagetable,p->  kstack,1,1);
   p->kstack = 0;
   //释放内核页表
   proc_free_kpt(p->kernel_pagetable);
