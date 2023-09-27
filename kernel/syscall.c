@@ -68,6 +68,22 @@ int
 argaddr(int n, uint64 *ip)
 {
   *ip = argraw(n);
+  struct proc *p = myproc();
+  if(walkaddr(p->pagetable,*ip) == 0){//说明是空地址，那么就要分配
+      uint64 faultAddr = *ip;
+      char* mem;
+      if(faultAddr > PGROUNDUP(p->trapframe->sp) - 1 && faultAddr < p->sz && (mem = kalloc()) != 0){
+          memset(mem,0,PGSIZE);
+          if(mappages(p->pagetable, PGROUNDDOWN(faultAddr), PGSIZE, (uint64)mem, PTE_W|PTE_X|PTE_R|PTE_U) != 0){
+              kfree((void*)mem);
+              p->killed = 1;
+              return -1;
+          }
+      }else{
+          p->killed = 1;
+          return -1;
+      }
+  }
   return 0;
 }
 
