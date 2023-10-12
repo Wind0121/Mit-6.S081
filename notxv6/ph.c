@@ -8,11 +8,14 @@
 #define NBUCKET 5
 #define NKEYS 100000
 
+pthread_mutex_t locks[NBUCKET];
+
 struct entry {
   int key;
   int value;
   struct entry *next;
 };
+//该散列表由五个桶组成，每个桶都是一个链表
 struct entry *table[NBUCKET];
 int keys[NKEYS];
 int nthread = 1;
@@ -35,32 +38,38 @@ insert(int key, int value, struct entry **p, struct entry *n)
   *p = e;
 }
 
+//该函数要做的就是将key-value放入到散列表中
 static 
 void put(int key, int value)
 {
+    //这里首先将key映射到对应的桶中
   int i = key % NBUCKET;
-
+  //这里就开始从对应的桶中找有没有存在的key
   // is the key already present?
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key)
       break;
   }
+  //存在就直接更新value
   if(e){
     // update the existing key.
     e->value = value;
-  } else {
+  } else {//否则就采用头插法->问题就出在这里，这里的不变量没有保证
     // the new is new.
+      pthread_mutex_lock(&locks[i]);
     insert(key, value, &table[i], table[i]);
+      pthread_mutex_unlock(&locks[i]);
   }
 }
 
 static struct entry*
 get(int key)
 {
+    //这地方同样是找到这个key映射到的桶
   int i = key % NBUCKET;
 
-
+  //查找这个key对应entry，没找到就是0
   struct entry *e = 0;
   for (e = table[i]; e != 0; e = e->next) {
     if (e->key == key) break;
@@ -72,9 +81,11 @@ get(int key)
 static void *
 put_thread(void *xa)
 {
+    //这地方的n实际上就是调用时传入的参数，也就是thread number
   int n = (int) (long) xa; // thread number
+  //这地方实际上是将key分段了，每个线程只负责自己的那一段，这样就达到了加速的目的（并行）
   int b = NKEYS/nthread;
-
+  //这地方就开始调用put防止key和value了
   for (int i = 0; i < b; i++) {
     put(keys[b*n + i], n);
   }
@@ -85,6 +96,7 @@ put_thread(void *xa)
 static void *
 get_thread(void *xa)
 {
+    //get只负责遍历所有key，然后找该key是否存在，和线程没关系
   int n = (int) (long) xa; // thread number
   int missing = 0;
 
@@ -99,10 +111,12 @@ get_thread(void *xa)
 int
 main(int argc, char *argv[])
 {
+    for(int i = 0;i < NBUCKET;i++)
+        pthread_mutex_init(&locks[i],NULL);
+
   pthread_t *tha;
   void *value;
   double t1, t0;
-
   if (argc < 2) {
     fprintf(stderr, "Usage: %s nthreads\n", argv[0]);
     exit(-1);
