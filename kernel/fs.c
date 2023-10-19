@@ -68,10 +68,12 @@ balloc(uint dev)
   struct buf *bp;
 
   bp = 0;
+  //bitmap可能有多个块，一个块有1024字节，因而一个bitmap块有1024 * 8个位，也就能代表BPB个块的使用状态
   for(b = 0; b < sb.size; b += BPB){
     bp = bread(dev, BBLOCK(b, sb));
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
       m = 1 << (bi % 8);
+      //这一部分可以不用完全看明白，实际上就是检查bitmap每一位对应的块是否空闲，空闲就可以分配
       if((bp->data[bi/8] & m) == 0){  // Is block free?
         bp->data[bi/8] |= m;  // Mark block in use.
         log_write(bp);
@@ -80,6 +82,7 @@ balloc(uint dev)
         return b + bi;
       }
     }
+    //把获得的bitmap块释放
     brelse(bp);
   }
   panic("balloc: out of blocks");
@@ -91,9 +94,11 @@ bfree(int dev, uint b)
 {
   struct buf *bp;
   int bi, m;
-
+  //先读取这个块(b)对应的bitmap块
   bp = bread(dev, BBLOCK(b, sb));
+  //在读取这个块在bitmap块内的偏移
   bi = b % BPB;
+  //后面就不用管了，反正就把bitmap里的使用状态标记为空闲
   m = 1 << (bi % 8);
   if((bp->data[bi/8] & m) == 0)
     panic("freeing free block");
@@ -108,24 +113,30 @@ bfree(int dev, uint b)
 // The inode disk structure holds metadata: the file's type,
 // its size, the number of links referring to it, and the
 // list of blocks holding the file's content.
+// 一个 inode 描述一个未命名的文件。inode 磁盘结构包含元数据：文件类型、文件大小、引用该文件的链接数量以及包含文件内容的块列表。
 //
 // The inodes are laid out sequentially on disk at
 // sb.startinode. Each inode has a number, indicating its
 // position on the disk.
+// 在 sb.startinode 处，inode 按顺序排列在磁盘上。每个节点都有一个编号，表示其在磁盘上的位置。
 //
 // The kernel keeps a cache of in-use inodes in memory
 // to provide a place for synchronizing access
 // to inodes used by multiple processes. The cached
 // inodes include book-keeping information that is
 // not stored on disk: ip->ref and ip->valid.
+// 内核会在内存中缓存正在使用的 inodes，为多个进程同步访问 inodes 提供空间。
+// 缓存的 inode 包括未存储在磁盘上的簿记信息：ip->ref 和 ip->valid。
 //
 // An inode and its in-memory representation go through a
 // sequence of states before they can be used by the
 // rest of the file system code.
+// 一个 inode 及其内存中的表示在被文件系统代码的其他部分使用之前，会经历一系列状态。
 //
 // * Allocation: an inode is allocated if its type (on disk)
 //   is non-zero. ialloc() allocates, and iput() frees if
 //   the reference and link counts have fallen to zero.
+//   ialloc()分配，如果引用和链接计数为零，iput()释放。
 //
 // * Referencing in cache: an entry in the inode cache
 //   is free if ip->ref is zero. Otherwise ip->ref tracks
@@ -133,16 +144,22 @@ bfree(int dev, uint b)
 //   files and current directories). iget() finds or
 //   creates a cache entry and increments its ref; iput()
 //   decrements ref.
+//   缓存中的指针：如果 ip->ref 为零，inode 缓存中的条目就是空闲的。
+//   否则，ip->ref 将跟踪指向该条目（打开的文件和当前目录）的内存指针的数量。
+//   iget() 查找或创建一个缓存条目，并递增其 ref；iput() 则递减 ref。
 //
 // * Valid: the information (type, size, &c) in an inode
 //   cache entry is only correct when ip->valid is 1.
 //   ilock() reads the inode from
 //   the disk and sets ip->valid, while iput() clears
 //   ip->valid if ip->ref has fallen to zero.
+//   有效：只有当 ip->valid 为 1 时，inode 缓存条目中的信息（类型、大小等）才是正确的。
+//   ilock() 从磁盘读取 inode 并设置 ip->valid，而 iput() 则在 ip->ref 降为 0 时清除 ip->valid。
 //
 // * Locked: file system code may only examine and modify
 //   the information in an inode and its content if it
 //   has first locked the inode.
+//   锁定：文件系统代码只有在首先锁定 inode 的情况下，才能检查和修改 inode 中的信息及其内容。
 //
 // Thus a typical sequence is:
 //   ip = iget(dev, inum)
@@ -157,15 +174,20 @@ bfree(int dev, uint b)
 // The separation also helps avoid deadlock and races during
 // pathname lookup. iget() increments ip->ref so that the inode
 // stays cached and pointers to it remain valid.
+// ilock() 独立于 iget()，因此系统调用可以获得对 inode 的长期引用（如打开的文件），而只在短时间内锁定它（如在 read() 中）。
+// iget()会递增 ip->ref，从而使 inode 保持缓存并使指向它的指针保持有效。
 //
 // Many internal file system functions expect the caller to
 // have locked the inodes involved; this lets callers create
 // multi-step atomic operations.
+// 许多内部文件系统函数都希望调用者已经锁定了相关的 inodes；这使得调用者可以创建多步原子操作。
 //
 // The icache.lock spin-lock protects the allocation of icache
 // entries. Since ip->ref indicates whether an entry is free,
 // and ip->dev and ip->inum indicate which i-node an entry
 // holds, one must hold icache.lock while using any of those fields.
+// icache.lock 自旋锁可保护 icache 条目的分配。由于 ip->ref 表示条目是否空闲，
+// 而 ip->dev 和 ip->inum 表示条目持有哪个 i 节点，因此在使用任何这些字段时都必须持有 icache.lock。
 //
 // An ip->lock sleep-lock protects all ip-> fields other than ref,
 // dev, and inum.  One must hold ip->lock in order to
@@ -174,7 +196,7 @@ bfree(int dev, uint b)
 struct {
   struct spinlock lock;
   struct inode inode[NINODE];
-} icache;
+} icache;//显然icache就是内存inode的数组
 
 void
 iinit()
@@ -190,7 +212,7 @@ iinit()
 static struct inode* iget(uint dev, uint inum);
 
 // Allocate an inode on device dev.
-// Mark it as allocated by  giving it type type.
+// Mark it as allocated by  giving it type.
 // Returns an unlocked but allocated and referenced inode.
 struct inode*
 ialloc(uint dev, short type)
@@ -200,14 +222,16 @@ ialloc(uint dev, short type)
   struct dinode *dip;
 
   for(inum = 1; inum < sb.ninodes; inum++){
+      //得到该inum对应的inode所在的块->一个块中有多个inode
     bp = bread(dev, IBLOCK(inum, sb));
+    //得到该dinode
     dip = (struct dinode*)bp->data + inum%IPB;
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip));
       dip->type = type;
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
-      return iget(dev, inum);
+      return iget(dev, inum);//获得inum对应的内存inode
     }
     brelse(bp);
   }
@@ -239,6 +263,7 @@ iupdate(struct inode *ip)
 // Find the inode with number inum on device dev
 // and return the in-memory copy. Does not lock
 // the inode and does not read it from disk.
+//查找编号为 inum 且设备号为 dev 的 inode 并返回内存副本。
 static struct inode*
 iget(uint dev, uint inum)
 {
@@ -333,7 +358,7 @@ void
 iput(struct inode *ip)
 {
   acquire(&icache.lock);
-
+  //释放这个内存inode
   if(ip->ref == 1 && ip->valid && ip->nlink == 0){
     // inode has no links and no other references: truncate and free.
 
@@ -379,20 +404,23 @@ bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
-
+  //如果是直接块，就直接返回
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
       ip->addrs[bn] = addr = balloc(ip->dev);
     return addr;
   }
+  //否则就位于间接块中，这里先获取简介块中的序号
   bn -= NDIRECT;
 
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
+    // 间接块相当于一个指针，其中的data存储了256个间接块的地址
     if((addr = ip->addrs[NDIRECT]) == 0)
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
+    // 这里获取到间接块，是直接用数组形式访问的
     if((addr = a[bn]) == 0){
       a[bn] = addr = balloc(ip->dev);
       log_write(bp);
@@ -452,6 +480,8 @@ stati(struct inode *ip, struct stat *st)
 // Caller must hold ip->lock.
 // If user_dst==1, then dst is a user virtual address;
 // otherwise, dst is a kernel address.
+// off是偏移量，n是读取的字节数，dst是保存数据的地方，user_dst == 1标识这是个用户虚拟地址，否则是内核地址
+// 返回值为成功读取的字节数
 int
 readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 {
@@ -483,6 +513,7 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
 // Returns the number of bytes successfully written.
 // If the return value is less than the requested n,
 // there was an error of some kind.
+// 和readi基本一样，只是把copyout换成了copyin
 int
 writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 {
@@ -526,6 +557,7 @@ namecmp(const char *s, const char *t)
 
 // Look for a directory entry in a directory.
 // If found, set *poff to byte offset of entry.
+// 根据name和给定目录inode找到对应的文件的inode
 struct inode*
 dirlookup(struct inode *dp, char *name, uint *poff)
 {
@@ -595,7 +627,7 @@ dirlink(struct inode *dp, char *name, uint inum)
 //   skipelem("///a//bb", name) = "bb", setting name = "a"
 //   skipelem("a", name) = "", setting name = "a"
 //   skipelem("", name) = skipelem("////", name) = 0
-//
+// 这个函数知道怎么用就行
 static char*
 skipelem(char *path, char *name)
 {
@@ -646,6 +678,7 @@ namex(char *path, int nameiparent, char *name)
       iunlock(ip);
       return ip;
     }
+    //查找当前级的inode
     if((next = dirlookup(ip, name, 0)) == 0){
       iunlockput(ip);
       return 0;

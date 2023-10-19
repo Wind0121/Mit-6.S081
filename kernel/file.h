@@ -14,14 +14,14 @@ struct file {
 #define	mkdev(m,n)  ((uint)((m)<<16| (n)))
 
 // in-memory copy of an inode
-struct inode {
+struct inode {        //这部分内容是内存中inode保存的
   uint dev;           // Device number
   uint inum;          // Inode number
   int ref;            // Reference count
   struct sleeplock lock; // protects everything below here
   int valid;          // inode has been read from disk?
 
-  short type;         // copy of disk inode
+  short type;         // copy of disk inode->这部分内容都是copy过来的
   short major;
   short minor;
   short nlink;

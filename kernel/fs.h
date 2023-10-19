@@ -28,14 +28,14 @@ struct superblock {
 #define NINDIRECT (BSIZE / sizeof(uint))
 #define MAXFILE (NDIRECT + NINDIRECT)
 
-// On-disk inode structure
+// On-disk inode structure,共计64个字节
 struct dinode {
   short type;           // File type
   short major;          // Major device number (T_DEVICE only)
   short minor;          // Minor device number (T_DEVICE only)
   short nlink;          // Number of links to inode in file system
   uint size;            // Size of file (bytes)
-  uint addrs[NDIRECT+1];   // Data block addresses
+  uint addrs[NDIRECT+1];   // Data block addresses->文件内容还是得存在data block中的，dinode负责索引
 };
 
 // Inodes per block.
@@ -50,7 +50,7 @@ struct dinode {
 // Block of free map containing bit for block b
 #define BBLOCK(b, sb) ((b)/BPB + sb.bmapstart)
 
-// Directory is a file containing a sequence of dirent structures.
+// Directory is a file containing a sequence of dirent(directory entries) structures.
 #define DIRSIZ 14
 
 struct dirent {
