@@ -61,6 +61,7 @@ bzero(int dev, int bno)
 // Blocks.
 
 // Allocate a zeroed disk block.
+// 这里返回的是块号
 static uint
 balloc(uint dev)
 {
@@ -214,6 +215,8 @@ static struct inode* iget(uint dev, uint inum);
 // Allocate an inode on device dev.
 // Mark it as allocated by  giving it type.
 // Returns an unlocked but allocated and referenced inode.
+
+//为一个设备分配一个内存inode
 struct inode*
 ialloc(uint dev, short type)
 {
@@ -399,6 +402,8 @@ iunlockput(struct inode *ip)
 
 // Return the disk block address of the nth block in inode ip.
 // If there is no such block, bmap allocates one.
+// 找到ip这个inode中块号为bn的块
+// 返回的也是块号
 static uint
 bmap(struct inode *ip, uint bn)
 {
